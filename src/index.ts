@@ -7,6 +7,7 @@ async function main() {
 
   await client.uniqueAB.deleteMany({})
   await client.iDAB.deleteMany({})
+  await client.regularAB.deleteMany({})
 
   console.log(`Filling...`)
 
@@ -26,8 +27,12 @@ async function main() {
     values.map((val) =>
       limit(async () => {
         // const res = await client.uniqueAB.create({ data: val })
-        const res = await client.iDAB.create({ data: val })
-        console.log(`Push ${JSON.stringify(res)}`)
+        const ress = await Promise.all([
+          client.iDAB.create({ data: val }),
+          client.uniqueAB.create({ data: val }),
+          client.regularAB.create({ data: val }),
+        ])
+        console.log(`Push ${JSON.stringify(ress)}`)
       }),
     ),
   )
@@ -36,18 +41,32 @@ async function main() {
 
   // Measeure search performance.
   const repetitions = 100_000
-  const start = process.hrtime.bigint()
 
-  for (let i = 0; i < repetitions; i++) {
+  console.log(`Regular search...`)
+
+  const regular = await benchmark(repetitions, async () => {
     const rand = values[Math.floor(Math.random() * values.length)]
-    // await client.uniqueAB.findUnique({ where: { a_b: rand } })
+    await client.regularAB.findFirst({ where: rand })
+  })
+
+  console.log(`Unique search...`)
+
+  const unique = await benchmark(repetitions, async () => {
+    const rand = values[Math.floor(Math.random() * values.length)]
+    await client.uniqueAB.findUnique({ where: { a_b: rand } })
+  })
+
+  console.log(`ID search...`)
+
+  const identifier = await benchmark(repetitions, async () => {
+    const rand = values[Math.floor(Math.random() * values.length)]
     await client.iDAB.findUnique({ where: { a_b: rand } })
-  }
+  })
 
-  const end = process.hrtime.bigint()
-
-  const time = (end - start) / BigInt(repetitions)
-  console.log(`Time: ${time}ns`)
+  console.log(`Repetitions: ${repetitions}`)
+  console.log(`Regular: ${regular}ns`)
+  console.log(`Unique: ${unique}ns`)
+  console.log(`Identifier: ${identifier}ns`)
 
   // Clean up!
 
@@ -60,3 +79,21 @@ if (require.main === module) {
 
 // unique 1313571ns
 // id     1358475ns
+
+/**
+ * Measures performance of a function with a given number of repetitions.
+ */
+async function benchmark(
+  reps: number,
+  f: (i: number) => Promise<void>,
+): Promise<BigInt> {
+  const start = process.hrtime.bigint()
+
+  for (let i = 0; i < reps; i++) {
+    await f(i)
+  }
+
+  const end = process.hrtime.bigint()
+  const time = (end - start) / BigInt(reps)
+  return time
+}

@@ -22,3 +22,10 @@ model IDAB {
 
   @@id([a, b])
 }
+
+model RegularAB {
+  id String @id @default(cuid())
+
+  a String
+  b String
+}
